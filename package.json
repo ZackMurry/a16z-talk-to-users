@@ -4,14 +4,19 @@
   "main": "index.js",
   "scripts": {
     "test": "node --test tests/unit.test.mjs",
-    "chrome": "node scripts/launch.mjs"
+    "chrome": "node scripts/launch.mjs",
+    "build": "esbuild extension/panel/agent.js --bundle --format=iife --target=chrome120 --minify-syntax --outfile=extension/panel/agent.bundle.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "description": "",
   "devDependencies": {
+    "esbuild": "^0.28.2",
     "puppeteer-core": "^25.13.0"
   },
-  "type": "module"
+  "type": "module",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.133.0"
+  }
 }

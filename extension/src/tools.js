@@ -63,7 +63,7 @@ export const TOOLS = [
   {
     name: 'list_context_documents',
     title: 'List user-provided context',
-    description: 'Lists goals, assumptions and documents the user added in the side panel and approved for use, with provenance and any detected conflicts between them. This is separate from your own memory.',
+    description: 'Lists goals, assumptions and documents the user added and approved for use, with provenance and any detected conflicts between them. This is separate from your own memory.',
     inputSchema: { type: 'object', properties: {} },
     annotations: { readOnlyHint: true },
   },
@@ -77,7 +77,7 @@ export const TOOLS = [
   {
     name: 'propose_changes',
     title: 'Propose spreadsheet changes (requires user approval)',
-    description: `Proposes a plan of spreadsheet edits. Nothing is written until the user reviews a before/after preview in the side panel and approves. Returns plan_id and status "pending_approval"; then poll get_plan_status (use wait_seconds). If the sheet changes before approval the plan becomes "stale" and must be re-proposed.
+    description: `Proposes a plan of spreadsheet edits. Nothing is written until the user reviews the preview shown on the sheet and clicks Accept. Returns plan_id and status "pending_approval"; then poll get_plan_status (use wait_seconds). If the sheet changes before approval the plan becomes "stale" and must be re-proposed.
 Allowed operations (objects in "operations"):
 - {"op":"set_values","range":"F1","values":[["Profit"]]} — literal values only.
 - {"op":"write_formula","range":"F2:F10","formula":"=B{row}-C{row}-D{row}-E{row}"} — {row} is replaced by each row number. Network functions are blocked.
@@ -105,7 +105,7 @@ Writing to non-empty cells requires "allow_overwrite": true on that operation.`,
   {
     name: 'post_insights',
     title: 'Show grounded insights to the user',
-    description: 'Displays analysis to the user, separating FINDINGS (facts from the data; must cite sheet ranges or metric/forecast ids) from SUGGESTIONS (recommendations; cite sources incl. your own memory as type agent_memory). Only mention company-specific targets if they come from your memory or user documents, and cite them. Citations are verified by the extension; unverifiable ones are flagged.',
+    description: 'Records analysis for the user (shown under Insights), separating FINDINGS (facts from the data; must cite sheet ranges or metric/forecast ids) from SUGGESTIONS (recommendations; cite sources incl. your own memory as type agent_memory). Only mention company-specific targets if they come from your memory or user documents, and cite them. Citations are verified by the extension; unverifiable ones are flagged.',
     inputSchema: { type: 'object', properties: {
       title: { type: 'string' },
       findings: { type: 'array', items: { type: 'object', properties: { statement: { type: 'string' }, evidence: { type: 'array', items: sourceSchema } }, required: ['statement', 'evidence'] } },
@@ -116,7 +116,7 @@ Writing to non-empty cells requires "allow_overwrite": true on that operation.`,
   {
     name: 'get_approved_summary',
     title: 'Get user-approved summary to save to your memory',
-    description: 'Returns the latest analysis summary the user reviewed and approved in the side panel (models, assumptions, results, sources; hypotheticals labeled). Save it to YOUR OWN memory/context store, then call confirm_summary_saved. wait_seconds blocks until one is available (max 120).',
+    description: 'Returns the latest analysis summary the user reviewed and approved (models, assumptions, results, sources; hypotheticals labeled). Save it to YOUR OWN memory/context store, then call confirm_summary_saved. wait_seconds blocks until one is available (max 120).',
     inputSchema: { type: 'object', properties: { wait_seconds: { type: 'integer', minimum: 0, maximum: 120, default: 0 } } },
     annotations: { readOnlyHint: true },
   },

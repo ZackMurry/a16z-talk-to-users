@@ -5,7 +5,7 @@ const $ = s => document.querySelector(s);
 const main = $('#main');
 
 const state = {
-  tab: 'agent',
+  tab: new URLSearchParams(location.search).get('view') ?? 'agent',
   activeTab: null, // browser tab
   spreadsheetId: null,
   url: null,
@@ -299,7 +299,7 @@ function renderReview() {
   const past = plans.filter(p => !active.includes(p));
   return [
     h('section', {}, h('h2', {}, 'Awaiting your decision'),
-      active.length ? active.map(renderPlan) : h('div', { class: 'empty' }, 'No proposed changes. Nothing will be written to your sheet unless you approve it here.')),
+      active.length ? active.map(renderPlan) : h('div', { class: 'empty' }, 'No pending changes. Nothing is written to your sheet unless you accept it.')),
     past.length ? h('section', {}, h('h2', {}, 'Decided'), past.map(p => {
       const [label, cls] = STATUS[p.status] ?? [p.status, 'b-neutral'];
       const open = state.ui.openPlans?.has(p.id);
@@ -575,6 +575,15 @@ function render() {
   window.scrollTo(0, scroll);
 }
 
+// Pop out: same panel in a small window, pinned to the current sheet tab.
+document.getElementById('popout').addEventListener('click', async () => {
+  if (!state.activeTab) return toast('Open a spreadsheet tab first', true);
+  await chrome.windows.create({ url: chrome.runtime.getURL(`panel/panel.html?tabId=${state.activeTab.id}`), type: 'popup', width: 420, height: 900 });
+});
+if (new URLSearchParams(location.search).get('tabId')) document.getElementById('popout').hidden = true;
+// Embedded in the agent panel's ⋯ views: show only the requested section.
+if (new URLSearchParams(location.search).get('embedded')) document.body.classList.add('embedded');
+
 document.querySelector('.tabs').addEventListener('click', e => {
   const b = e.target.closest('button[data-tab]');
   if (!b) return;
@@ -607,13 +616,7 @@ chrome.storage.onChanged.addListener(async (changes, area) => {
 chrome.tabs.onActivated.addListener(refreshActiveTab);
 chrome.tabs.onUpdated.addListener((id, info) => { if (id === state.activeTab?.id && (info.url || info.status === 'complete')) refreshActiveTab(); });
 
-// Source-version check: pending previews are invalidated as soon as the sheet changes.
-setInterval(async () => {
-  for (const p of forSheet('plans').filter(p => p.status === 'pending_approval')) {
-    if (state.ui.busy.has('ap' + p.id)) continue;
-    try { await act('plan:checkStale', { planId: p.id }); } catch { /* transient */ }
-  }
-}, 5000);
+// Staleness of pending previews is checked by the on-sheet preview card.
 setInterval(() => { if (state.tab === 'agent') render(); }, 15000);
 
 (async () => {

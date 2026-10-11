@@ -90,7 +90,7 @@ function untrusted(data) {
 
 async function requireAgentEnabled() {
   const agent = await store.get('agent', {});
-  if (agent.enabled === false) throw Object.assign(new Error('The user has disconnected the agent from this extension.'), { actionable: 'Ask the user to click "Connect agent" in the BYOA Sheets side panel.' });
+  if (agent.enabled === false) throw Object.assign(new Error('The user has disconnected the agent from this extension.'), { actionable: 'Ask the user to reconnect tools in the agent panel (⋯ → Context).' });
 }
 
 const toolHandlers = {
@@ -105,8 +105,8 @@ const toolHandlers = {
       extension: 'Bring Your Own Agent to Sheets',
       role: 'Exposes this Google Sheet to you (the user\'s own agent) through constrained, approval-gated tools. This extension has no access to your memory or conversation history; use your own memory for company context and save approved summaries back to it yourself.',
       spreadsheet: { id: env.spreadsheetId, title: ctx.title, active_tab: ctx.activeSheetTitle, tabs: ctx.meta.tabs },
-      permissions: { ...perm, writes: perm.can_edit === false ? 'disabled: you only have view access to this spreadsheet' : 'only via propose_changes + explicit user approval in the side panel' },
-      approval_policy: 'Every write is proposed with propose_changes, previewed to the user, and executed only after the user approves. If the sheet changes after preview, the plan becomes stale and must be re-proposed.',
+      permissions: { ...perm, writes: perm.can_edit === false ? 'disabled: you only have view access to this spreadsheet' : 'only via propose_changes + the user accepting the on-sheet preview' },
+      approval_policy: 'Every write is proposed with propose_changes, previewed on the sheet, and executed only after the user clicks Accept. If the sheet changes after preview, the plan becomes stale and must be re-proposed.',
       user_context_documents: docs.filter(d => d.active).map(d => ({ id: d.id, name: d.name, category: d.category, provenance: d.provenance })),
       capabilities: TOOLS.map(t => t.name),
       how_it_works: 'The extension operates the Sheets page like a user (selection, copy/paste, toolbar) with the user\'s own permissions. No Google API access or OAuth is used.',
@@ -277,7 +277,7 @@ const toolHandlers = {
       scenario: { revenue: r2(scen.totals.revenue), cost: r2(scen.totals.cost), profit: r2(scen.totals.profit), margin_pct: r2(scen.totals.margin_pct) },
       impact: { profit_change: r2(scen.totals.profit - base.totals.profit), margin_change_pts: r2(scen.totals.margin_pct - base.totals.margin_pct), cost_change: r2(scen.totals.cost - base.totals.cost), revenue_change: r2(scen.totals.revenue - base.totals.revenue) },
       per_period: basis.map((b, i) => ({ period: b.label, baseline_profit: r2(base.per[i].profit), scenario_profit: r2(scen.per[i].profit) })),
-      note: 'Computed in the extension; nothing was written to the sheet. The user can save this scenario to a new tab from the side panel (requires approval).',
+      note: 'Computed in the extension; nothing was written to the sheet. The user can save this scenario to a new tab from Insights (requires approval).',
     };
     await store.putIn('scenarios', id, { id, spreadsheetId: env.spreadsheetId, sheet: title, createdAt: Date.now(), name, result, saved: false });
     await store.audit({ type: 'scenario_computed', spreadsheetId: env.spreadsheetId, summary: `Scenario "${name}": profit ${result.impact.profit_change >= 0 ? '+' : ''}${result.impact.profit_change}`, detail: { id } });
@@ -288,7 +288,7 @@ const toolHandlers = {
     const docs = Object.values(await store.get('docs', {}));
     const active = docs.filter(d => d.active);
     return {
-      note: 'These are documents/goals the user added in the side panel. Your own memory is separate; this extension cannot see it.',
+      note: 'These are documents/goals the user added. Your own memory is separate; this extension cannot see it.',
       documents: active.map(d => ({ id: d.id, name: d.name, category: d.category, provenance: d.provenance, added_at: new Date(d.addedAt).toISOString(), chars: d.text.length })),
       conflicts: detectConflicts(active),
       inactive_count: docs.length - active.length,
@@ -366,7 +366,7 @@ const toolHandlers = {
 
   async get_approved_summary(args, env) {
     const syncs = Object.values(await store.get('syncs', {})).filter(s => s.spreadsheetId === env.spreadsheetId && ['approved', 'delivered'].includes(s.status)).sort((a, b) => b.approvedAt - a.approvedAt);
-    if (!syncs.length) return { available: false, message: 'No approved summary yet. Ask the user to review and approve one in the side panel (Sync tab).' };
+    if (!syncs.length) return { available: false, message: 'No approved summary yet. Ask the user to review and approve one (agent panel ⋯ → Sync).' };
     const s = syncs[0];
     await store.patchIn('syncs', s.id, { status: 'delivered', deliveredAt: Date.now() });
     await store.audit({ type: 'sync_delivered', spreadsheetId: env.spreadsheetId, summary: `Summary ${s.id} delivered to agent`, detail: { id: s.id } });
@@ -432,7 +432,7 @@ async function buildPlan(env, { title, rationale, assumptions, ops, revises, ori
   const sourceHashes = Object.fromEntries([...ctx.grids].map(([t, g]) => [t, g.hash]));
   const id = store.uid('plan');
   const plan = {
-    id, spreadsheetId: env.spreadsheetId, spreadsheetTitle: ctx.title, url: env.url, origin,
+    id, spreadsheetId: env.spreadsheetId, spreadsheetTitle: ctx.title, url: env.url, origin, tabId: ctx.tabId,
     createdAt: Date.now(), title: String(title ?? 'Proposed changes').slice(0, 140), rationale: String(rationale ?? '').slice(0, 2000),
     assumptions: (assumptions ?? []).map(a => String(a).slice(0, 500)).slice(0, 20),
     ops: compiled, sourceHashes, revises: revises ?? null,
@@ -441,12 +441,72 @@ async function buildPlan(env, { title, rationale, assumptions, ops, revises, ori
   };
   if (revises) {
     const plans = await store.get('plans', {});
-    if (plans[revises] && ['pending_approval', 'revision_requested', 'stale'].includes(plans[revises].status)) await store.patchIn('plans', revises, { status: 'superseded', supersededBy: id });
+    if (plans[revises] && ['pending_approval', 'revision_requested', 'stale'].includes(plans[revises].status)) { await store.patchIn('plans', revises, { status: 'superseded', supersededBy: id }); previewMessage(plans[revises], 'hide'); }
   }
   await store.putIn('plans', id, plan);
   await store.audit({ type: 'plan_proposed', spreadsheetId: env.spreadsheetId, status: plan.status === 'invalid' ? 'error' : 'info', summary: `${origin === 'agent' ? 'Agent' : 'User'} proposed "${plan.title}" (${compiled.length} op${compiled.length > 1 ? 's' : ''})${plan.status === 'invalid' ? ' — failed validation' : ''}`, detail: { planId: id, ops: compiled.map(o => o.summary || o.kind), errors: plan.validation.errors } });
-  if (plan.status === 'pending_approval') notifyPendingPlan(plan);
+  if (plan.status === 'pending_approval') {
+    plan.preview = previewPayload(plan, ctx);
+    await store.patchIn('plans', id, { preview: plan.preview });
+    notifyPendingPlan(plan);
+    chrome.tabs.sendMessage(ctx.tabId, { channel: 'preview', action: 'show', preview: plan.preview }).catch(() => {});
+  }
   return plan;
+}
+
+// --- On-sheet preview -------------------------------------------------------------
+
+function formatLike(v, fmt) {
+  if (typeof v !== 'number' || !Number.isFinite(v)) return v === null || v === undefined ? '' : String(v);
+  const decimals = /\.(0+)/.exec(fmt?.pattern ?? '')?.[1].length ?? 0;
+  const num = d => v.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
+  switch (fmt?.type) {
+    case 'CURRENCY': return `${v < 0 ? '-' : ''}$${Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}`;
+    case 'PERCENT': return `${(v * 100).toFixed(decimals)}%`;
+    case 'DATE': case 'DATE_TIME': { const d = new Date(Date.UTC(1899, 11, 30) + v * 86400000); return `${d.getUTCMonth() + 1}/${d.getUTCDate()}/${d.getUTCFullYear()}`; }
+    default: return Number.isInteger(v) ? num(0) : v.toLocaleString('en-US', { maximumFractionDigits: 2 });
+  }
+}
+
+// Ghost cells + card data for the sheet the plan mostly writes to.
+function previewPayload(plan, ctx) {
+  const ops = plan.ops.map(o => ({ index: o.index, summary: o.summary || o.kind, errors: o.errors, warnings: o.warnings }));
+  const base = { planId: plan.id, title: plan.title, rationale: plan.rationale, assumptions: plan.assumptions, origin: plan.origin, ops };
+  const writes = plan.ops.flatMap(o => o.writes);
+  const charts = plan.ops.filter(o => o.chart).map(o => o.chart);
+  const counts = new Map();
+  for (const w of writes) counts.set(w.sheet, (counts.get(w.sheet) ?? 0) + 1);
+  for (const c of charts) counts.set(c.domain.sheet, (counts.get(c.domain.sheet) ?? 0) + 1);
+  const sheet = [...counts].sort((a, b) => b[1] - a[1])[0]?.[0];
+  if (!sheet || !ctx.sheetsByTitle.has(sheet)) return { ...base, sheet: sheet ?? null, box: null, ghosts: [] };
+  const g = ctx.grids.get(sheet);
+  const cellAt = (row, col) => g?.cells[row - g.startRow]?.[col - g.startCol];
+  const fmtFor = w => {
+    const above = cellAt(w.row - 1, w.col)?.fmt;
+    if (above && above.type !== 'TEXT') return above;
+    const ref = /\$?([A-Z]{1,3})\$?(\d+)/.exec(w.content ?? '');
+    if (ref) return cellAt(Number(ref[2]) - 1, ref[1].split('').reduce((n, ch) => n * 26 + ch.charCodeAt(0) - 64, 0) - 1)?.fmt ?? null;
+    return null;
+  };
+  const ghosts = writes.filter(w => w.sheet === sheet).map(w => {
+    const formula = w.kind === 'formula' ? w.content : null;
+    const value = formula ? w.expected : w.content;
+    const numeric = typeof value === 'number';
+    const display = formula ? (Number.isFinite(w.expected) ? formatLike(w.expected, fmtFor(w)) : formula) : (numeric ? formatLike(value, null) : String(value ?? ''));
+    const before = w.before?.formula ?? w.before?.text ?? '';
+    return { row: w.row, col: w.col, display, formula, numeric: numeric || (formula && Number.isFinite(w.expected)), overwrites: !!before, before };
+  });
+  const chartOp = charts.find(c => c.domain.sheet === sheet);
+  const chart = chartOp ? { row: chartOp.anchor.startRow, col: chartOp.anchor.startCol, type: chartOp.type[0] + chartOp.type.slice(1).toLowerCase(), title: chartOp.title, ranges: [chartOp.domain, ...chartOp.series].map(r => toA1({ ...r, sheet: null })).join(', ') } : null;
+  const pts = [...ghosts.map(x => ({ row: x.row, col: x.col })), ...(chart ? [{ row: chart.row, col: chart.col }] : [])];
+  if (!pts.length) return { ...base, sheet, box: null, ghosts: [] };
+  const box = { startRow: Math.min(...pts.map(p => p.row)), endRow: Math.max(...pts.map(p => p.row)) + 1, startCol: Math.min(...pts.map(p => p.col)), endCol: Math.max(...pts.map(p => p.col)) + 1 };
+  return { ...base, sheet, box, ghosts, chart };
+}
+
+function previewMessage(plan, action) {
+  if (!plan?.tabId) return;
+  chrome.tabs.sendMessage(plan.tabId, { channel: 'preview', action, planId: plan.id }).catch(() => {});
 }
 
 // Data for the panel's chart preview: current cell values, or planned values/expected results.
@@ -477,7 +537,7 @@ function planForAgent(plan) {
     validation: plan.validation,
   };
   const msg = {
-    pending_approval: 'Waiting for the user to review and approve in the BYOA Sheets side panel. Nothing has been written. Poll get_plan_status.',
+    pending_approval: 'Shown to the user as a preview on the sheet with Accept / Reject. Nothing has been written yet. Wait for the decision with get_plan_status (wait_seconds up to 120).',
     invalid: 'Plan failed validation; nothing was written. Fix the errors and call propose_changes again.',
     rejected: 'The user rejected this plan. Nothing was written.',
     revision_requested: 'The user requested a revision; see user_feedback. Propose a new plan with revises_plan_id.',
@@ -522,6 +582,7 @@ async function checkStale(planId) {
   }
   if (changed.length) {
     await store.patchIn('plans', planId, { status: 'stale', staleAt: Date.now(), staleReason: `Sheet data changed after preview (${changed.join(', ')})` });
+    previewMessage(plan, 'stale');
     await store.audit({ type: 'plan_stale', spreadsheetId: plan.spreadsheetId, status: 'error', summary: `"${plan.title}" invalidated: sheet changed after preview`, detail: { planId } });
     await refreshBadge();
     return { status: 'stale', changed };
@@ -567,6 +628,7 @@ async function approvePlan(planId, approvedIndexes) {
     detail: { planId, results: results.map(r => ({ index: r.index, status: r.status, error: r.error })), verification },
   });
   await refreshBadge();
+  if (status === 'executed') setTimeout(() => previewMessage(plan, 'hide'), 2500);
   return { status, execution };
 }
 
@@ -575,6 +637,7 @@ async function decidePlan(planId, decision, feedback) {
   if (!plan || !['pending_approval', 'stale', 'invalid'].includes(plan.status)) throw new Error('Plan is not awaiting a decision');
   const status = decision === 'revise' ? 'revision_requested' : 'rejected';
   await store.patchIn('plans', planId, { status, decision: { decision: status, approvedIndexes: [], at: Date.now(), feedback: feedback ? String(feedback).slice(0, 2000) : '' } });
+  setTimeout(() => previewMessage(plan, 'hide'), 1800);
   await store.audit({ type: decision === 'revise' ? 'plan_revision_requested' : 'plan_rejected', spreadsheetId: plan.spreadsheetId, summary: `User ${decision === 'revise' ? 'requested revision of' : 'rejected'} "${plan.title}"${feedback ? `: ${feedback}` : ''}`, detail: { planId } });
   await refreshBadge();
 }

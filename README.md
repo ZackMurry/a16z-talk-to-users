@@ -1,6 +1,9 @@
 # Bring Your Own Agent to Sheets (Chrome extension)
 
-Implements `PRD.pdf` as an MV3 Chrome extension. The open Google Sheet is exposed to **the user's own browser agent** as WebMCP tools (`document.modelContext.registerTool`). The agent brings its own model and memory; the extension supplies sheet understanding, deterministic arithmetic, approval-gated edits, audit/revert and a context-sync handshake.
+Implements `PRD.pdf` as an MV3 Chrome extension with two parts:
+
+1. **BYOA Sheets (WebMCP tools):** the open Google Sheet is exposed to any browser agent as WebMCP tools (`document.modelContext.registerTool`). It covers sheet understanding, deterministic arithmetic, approval-gated edits, audit/revert and a context-sync handshake. Proposed edits appear **on the sheet itself** as a preview (ghost cells plus an Accept / Revise / Reject card). Nothing is written until the user clicks Accept.
+2. **Agent side panel:** a minimal, generic chat agent (Claude via the Anthropic SDK). It discovers whatever WebMCP tools the active tab exposes and calls them like any other WebMCP client would. It has nothing sheet-specific, and it happens to use the BYOA Sheets tools on Sheets pages.
 
 No Google APIs or OAuth. The extension operates the Sheets page the way a user would (in the spirit of Docs Hotkey):
 
@@ -23,11 +26,13 @@ extension/
   src/webmcp.js          MAIN world: registers the 14 tools on document.modelContext
   src/bridge.js          isolated world: page ⇄ service worker relay
   src/driver.js          isolated world: page driver (all sheet I/O)
+  src/preview.js         isolated world: on-sheet preview (ghost cells + Accept/Reject card)
   src/background.js      tool handlers, plans, approvals, stale checks, audit, sync
   src/ops.js             allowlisted ops: validate → preview → execute → verify → revert
   src/analysis.js        header/type detection, metrics, forecasts, preview evaluator
   src/tools.js           tool schemas/descriptions (single source of truth)
-  panel/                 side panel: Agent · Context · Review · Analysis · Sync · History
+  panel/agent.js         side-panel chat agent (bundled with the SDK into agent.bundle.js)
+  panel/console.*        older detailed console (changes, context, sync, history); not linked from the panel
 demo/company-goals.md    sample context document for the Context tab
 scripts/                 dev harness (launch Chrome, play the agent, e2e)
 tests/unit.test.mjs      unit tests for the deterministic core
@@ -39,6 +44,7 @@ Requirements: Chrome 146+ with WebMCP. Either enable `chrome://flags/#enable-web
 
 ```sh
 npm install
+npm run build                  # bundles panel/agent.js + @anthropic-ai/sdk → panel/agent.bundle.js
 npx @puppeteer/browsers install chrome@canary --path ./.chrome   # once
 npm run chrome -- "https://docs.google.com/spreadsheets/d/<id>/edit"   # flag + extension preloaded
 ```
@@ -61,6 +67,7 @@ node scripts/e2e.mjs [--keep]  # full PRD journey against the open sheet (needs 
 node scripts/agent.mjs <tool> '<json>'    # call a tool as the agent
 node scripts/panel.mjs <action> '<json>'  # perform a panel action as the user
 node scripts/reload.mjs        # reload extension + sheet tabs after code changes
+node scripts/mock-anthropic.mjs  # local stand-in for the Messages API (Settings → Advanced → base URL http://127.0.0.1:8787, key test-key)
 ```
 
 ## Known limitations

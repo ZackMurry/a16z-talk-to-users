@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BYOA Sheets</title>
+  <link rel="stylesheet" href="console.css">
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <header class="top">
+    <div class="brand">
+      <span class="logo" aria-hidden="true"></span>
+      <div>
+        <h1>Bring Your Own Agent</h1>
+        <p class="sheet-title" id="sheetTitle">No spreadsheet open</p>
+      </div>
+    </div>
+    <div class="spread" style="align-items:center">
+      <div class="pills" id="pills" aria-live="polite"></div>
+      <button class="btn link small" id="popout" title="Open this panel in its own window (keeps the side panel free for another extension, e.g. an agent)">Pop out ↗</button>
+    </div>
+  </header>
+
+  <nav class="tabs" role="tablist" aria-label="Sections">
+    <button role="tab" id="tab-agent" aria-controls="main" data-tab="agent">Agent</button>
+    <button role="tab" id="tab-context" aria-controls="main" data-tab="context">Context</button>
+    <button role="tab" id="tab-review" aria-controls="main" data-tab="review">Review <span class="count" id="reviewCount" hidden></span></button>
+    <button role="tab" id="tab-analysis" aria-controls="main" data-tab="analysis">Analysis</button>
+    <button role="tab" id="tab-sync" aria-controls="main" data-tab="sync">Sync</button>
+    <button role="tab" id="tab-history" aria-controls="main" data-tab="history">History</button>
+  </nav>
+
+  <main id="main" role="tabpanel" tabindex="-1"></main>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script type="module" src="console.js"></script>
+</body>
+</html>

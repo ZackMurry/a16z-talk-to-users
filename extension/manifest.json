@@ -10,7 +10,8 @@
     "storage",
     "unlimitedStorage",
     "sidePanel",
-    "tabs"
+    "tabs",
+    "scripting"
   ],
   "host_permissions": [
     "https://docs.google.com/spreadsheets/*"
@@ -38,7 +39,8 @@
       ],
       "js": [
         "src/bridge.js",
-        "src/driver.js"
+        "src/driver.js",
+        "src/preview.js"
       ],
       "run_at": "document_idle"
     },

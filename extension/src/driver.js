@@ -9,7 +9,7 @@
 
 (() => {
   if (window.__byoaDriver) return;
-  window.__byoaDriver = true;
+  window.__byoaDriver = {}; // filled in below; preview.js (same isolated world) uses run()
 
   const COMPACT = 'application/x-vnd.google-spreadsheet-compact-table+json';
   const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -496,8 +496,22 @@
   }
   const hideBanner = () => banner?.remove();
 
+  // Geometry for the on-sheet preview: pixel sizes of the box's columns/rows, then leave the
+  // box selected so Sheets' own .selection element marks where it is on screen.
+  async function previewGeometry(sheet, box) {
+    await switchTo(sheet);
+    const { html } = await copyHtml(rangeA1(box.startRow, box.startCol, box.endRow, box.endCol));
+    const colWidths = [...html.matchAll(/<col width="(\d+)"/g)].map(m => Number(m[1]));
+    const rowHeights = [...html.matchAll(/<tr style="height:(\d+)px/g)].map(m => Number(m[1]));
+    const range = rangeA1(box.startRow, box.startCol, box.endRow, box.endCol);
+    await select(range);
+    return { colWidths, rowHeights, range };
+  }
+
   const OPS = {
     meta: async () => meta(),
+    previewGeometry: ({ sheet, box }) => previewGeometry(sheet, box),
+    select: ({ sheet, range }) => switchTo(sheet).then(() => select(range)),
     readUsed: ({ sheet }) => readUsed(sheet),
     readRange: ({ sheet, range }) => readRange(sheet, range),
     snapshot: async ({ sheet, range }) => { await switchTo(sheet); return copyPayload(range, { full: true }); },
@@ -522,7 +536,7 @@
       if (!fn) throw new Error(`Unknown driver op ${op}`);
       const origSheet = activeSheet();
       const origSel = nameBox()?.value;
-      if (WRITES.has(op)) showBanner('BYOA Sheets: applying your approved changes…');
+      if (WRITES.has(op)) showBanner('Applying approved changes…');
       try {
         return await fn(args ?? {});
       } finally {
@@ -538,6 +552,8 @@
     queue = job.catch(() => {});
     return job;
   }
+
+  Object.assign(window.__byoaDriver, { run, nameBoxValue: () => nameBox()?.value ?? null, activeSheet });
 
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (msg?.channel !== 'driver') return false;
