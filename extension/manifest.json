@@ -1,0 +1,56 @@
+{
+  "manifest_version": 3,
+  "name": "Bring Your Own Agent to Sheets",
+  "short_name": "BYOA Sheets",
+  "version": "0.1.0",
+  "description": "Expose the open Google Sheet to your own AI agent over WebMCP \u2014 previews, approvals, audit and context sync. Works through the page; no API keys.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA1TMJU8wuZiaDizaIq3O3hHAv559foaggm6CG61D02gGzJbFy7fWT1H6woE1nmjeVAfWtnAuWQrN0NAJTqHJSqzDio06rGQMhyBgFTVV/Zbs0vmeMjjAoPO/gLku0yf3i7MN/QY+PpW7sFiYrNj4MrzVOCF8M2/Y+N9Py6YMNTxPDgwYubydHZ6L4TgvEtnP8IdzWeSPDFbqjxoRLROdBsFB4HvDav2+3SusgrN3iPQWaWVm7HPMTqmPLW7nt7HMuvxnb7Ix4hUlbhHDdlxoE41v3j6WWLoN5kF0gySJVnHKdAFdeOynTzifObtFbvHhD4QztMxVf6A43dHCFewJY6QIDAQAB",
+  "minimum_chrome_version": "146",
+  "permissions": [
+    "storage",
+    "unlimitedStorage",
+    "sidePanel",
+    "tabs"
+  ],
+  "host_permissions": [
+    "https://docs.google.com/spreadsheets/*"
+  ],
+  "background": {
+    "service_worker": "src/background.js",
+    "type": "module"
+  },
+  "side_panel": {
+    "default_path": "panel/panel.html"
+  },
+  "action": {
+    "default_title": "Open BYOA Sheets panel",
+    "default_icon": {
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "128": "icons/icon128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://docs.google.com/spreadsheets/d/*"
+      ],
+      "js": [
+        "src/bridge.js",
+        "src/driver.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://docs.google.com/spreadsheets/d/*"
+      ],
+      "js": [
+        "src/webmcp.js"
+      ],
+      "world": "MAIN",
+      "run_at": "document_start"
+    }
+  ]
+}

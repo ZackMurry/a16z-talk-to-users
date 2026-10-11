@@ -1,0 +1,17 @@
+{
+  "name": "a16z-talk-to-users",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "node --test tests/unit.test.mjs",
+    "chrome": "node scripts/launch.mjs"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "devDependencies": {
+    "puppeteer-core": "^25.13.0"
+  },
+  "type": "module"
+}
